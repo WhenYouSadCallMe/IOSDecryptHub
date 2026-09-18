@@ -10,7 +10,7 @@
 
 - Event Schema v1
 - 进程内 EventBus（带 context 背压）
-- 声明式 HookSpec/Profile JSON 加载与校验
+- 声明式 HookSpec/Profile JSON/YAML 加载与统一校验（设备端仍使用 JSON）
 - 原生插件 ABI 草案（`agent/include`）
 - 通用 Hook Registry：批量 profile 安装、启用/停用、卸载和快照
 - `core/analysis`：熵值/魔数/编码识别、时间窗口去重、值溯源图、响应分层

@@ -1,0 +1,18 @@
+schemaVersion: 1
+name: generic-network-yaml
+mode: record-only
+hooks:
+  - id: network.task.resume
+    type: objc
+    target:
+      class: NSURLSessionTask
+      selector: resume
+    capture:
+      - arguments
+      - result
+      - stack
+    redact:
+      - authorization
+      - cookie
+      - set-cookie
+    sampleRate: 1

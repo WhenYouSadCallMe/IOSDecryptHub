@@ -37,3 +37,22 @@ func TestProfileValidationRejectsDuplicateAndInvalidRate(t *testing.T) {
 		t.Fatal("expected profile validation error")
 	}
 }
+
+func TestYAMLProfileUsesSameValidationContract(t *testing.T) {
+	profile, err := LoadYAML([]byte(`schemaVersion: 1
+name: yaml-profile
+mode: record-only
+hooks:
+  - id: request
+    type: objc
+    target:
+      class: NSURLSessionTask
+      selector: resume
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if profile.Name != "yaml-profile" || len(profile.Hooks) != 1 || profile.Hooks[0].Target.Selector != "resume" {
+		t.Fatalf("unexpected YAML profile: %+v", profile)
+	}
+}

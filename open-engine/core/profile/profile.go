@@ -8,7 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 const CurrentSchemaVersion = 1
@@ -70,7 +73,25 @@ func LoadFile(path string) (Profile, error) {
 	if err != nil {
 		return Profile{}, fmt.Errorf("read profile %q: %w", path, err)
 	}
+	if ext := strings.ToLower(filepath.Ext(path)); ext == ".yaml" || ext == ".yml" {
+		return LoadYAML(data)
+	}
 	return Load(data)
+}
+
+// LoadYAML normalizes YAML into the same JSON-shaped Profile model and then
+// runs the exact JSON validation path. The runtime therefore has one contract
+// regardless of how a host-authored profile was written.
+func LoadYAML(data []byte) (Profile, error) {
+	var normalized map[string]any
+	if err := yaml.Unmarshal(data, &normalized); err != nil {
+		return Profile{}, fmt.Errorf("decode YAML profile: %w", err)
+	}
+	jsonData, err := json.Marshal(normalized)
+	if err != nil {
+		return Profile{}, fmt.Errorf("normalize YAML profile: %w", err)
+	}
+	return Load(jsonData)
 }
 
 func (p Profile) Validate() error {
