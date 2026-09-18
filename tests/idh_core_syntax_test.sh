@@ -16,9 +16,16 @@ CLANG=$(xcrun --find clang)
 echo "Objective-C syntax SDK: $SDK_NAME ($SDK)"
 echo "Objective-C syntax clang: $CLANG"
 
-for source in "$ROOT"/src/idh-core/*.m; do
+for source in \
+  "$ROOT"/src/idh-core/*.m \
+  "$ROOT"/src/idh-native/*.m \
+  "$ROOT"/src/idh-correlation/*.m \
+  "$ROOT"/src/idh-observers/*.m; do
   "$CLANG" -fobjc-arc -fblocks -fsyntax-only -isysroot "$SDK" \
-    -I"$ROOT/src/idh-core" "$source"
+    -I"$ROOT/src/idh-core" \
+    -I"$ROOT/src/idh-native" \
+    -I"$ROOT/src/idh-correlation" \
+    -I"$ROOT/src/idh-observers" "$source"
 done
 
 echo "idh-core Objective-C syntax: OK"
