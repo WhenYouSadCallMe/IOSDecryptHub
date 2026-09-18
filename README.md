@@ -38,6 +38,9 @@ make test-open-engine
 JSONL 传输基础以及只维护声明式状态的 Hook Registry，供后续 macOS/Xcode 授权
 Agent 接入；当前不会自动替换闭源引擎。
 
+`src/idh-host/` 另有系统 SQLite 事件存储，`src/idh-observers/` 提供 Record-only
+事件适配边界，可把已有的授权采集器或 JSBridge 日志接入统一事件流。
+
 ## 开源参考
 
 开放分析层的事件/解析设计参考了以下公开项目的接口思路；本仓库当前没有

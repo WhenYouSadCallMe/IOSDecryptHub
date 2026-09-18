@@ -1,5 +1,7 @@
 #import "IDHEvent.h"
 
+#import <CommonCrypto/CommonDigest.h>
+
 NSInteger const IDHEventSchemaVersion = 1;
 
 static NSString *IDHISO8601Date(NSDate *date) {
@@ -12,6 +14,41 @@ static NSString *IDHISO8601Date(NSDate *date) {
                                   NSISO8601DateFormatWithColonSeparatorInTime;
     });
     return [formatter stringFromDate:date];
+}
+
+static BOOL IDHKeyIsSensitive(NSString *key) {
+    NSString *lower = key.lowercaseString;
+    for (NSString *marker in @[@"authorization", @"cookie", @"set-cookie", @"password", @"passwd", @"secret", @"token", @"api-key", @"apikey", @"verify-code"]) {
+        if ([lower containsString:marker]) return YES;
+    }
+    return NO;
+}
+
+static NSDictionary *IDHMaskedValue(id value) {
+    NSData *data = [value isKindOfClass:[NSData class]] ? value : [[NSString stringWithFormat:@"%@", value ?: @""] dataUsingEncoding:NSUTF8StringEncoding];
+    unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+    CC_SHA256(data.bytes, (CC_LONG)data.length, digest);
+    NSMutableString *hash = [NSMutableString stringWithCapacity:CC_SHA256_DIGEST_LENGTH * 2];
+    for (NSUInteger index = 0; index < CC_SHA256_DIGEST_LENGTH; index++) [hash appendFormat:@"%02x", digest[index]];
+    return @{ @"redacted": @YES, @"length": @(data.length), @"sha256": hash };
+}
+
+static id IDHRedactedObject(id value, NSString *key, BOOL force) {
+    if (force || (key.length && IDHKeyIsSensitive(key))) return IDHMaskedValue(value);
+    if ([value isKindOfClass:[NSDictionary class]]) {
+        NSMutableDictionary *result = [NSMutableDictionary dictionary];
+        [(NSDictionary *)value enumerateKeysAndObjectsUsingBlock:^(id childKey, id childValue, BOOL *stop) {
+            NSString *name = [NSString stringWithFormat:@"%@", childKey];
+            result[name] = IDHRedactedObject(childValue, name, NO) ?: [NSNull null];
+        }];
+        return result;
+    }
+    if ([value isKindOfClass:[NSArray class]]) {
+        NSMutableArray *result = [NSMutableArray arrayWithCapacity:[(NSArray *)value count]];
+        for (id child in (NSArray *)value) [result addObject:IDHRedactedObject(child, nil, NO) ?: [NSNull null]];
+        return result;
+    }
+    return value;
 }
 
 @implementation IDHEvent
@@ -91,8 +128,8 @@ static NSString *IDHISO8601Date(NSDate *date) {
     if (self.requestID) optional[@"requestId"] = self.requestID;
     if (self.parentEventID) optional[@"parentEventId"] = self.parentEventID;
     if (self.layer) optional[@"layer"] = self.layer;
-    if (self.arguments) optional[@"arguments"] = self.arguments;
-    if (self.result) optional[@"result"] = self.result;
+    if (self.arguments) optional[@"arguments"] = IDHRedactedObject(self.arguments, @"arguments", self.sensitivity == IDHEventSensitivitySecret);
+    if (self.result) optional[@"result"] = IDHRedactedObject(self.result, @"result", self.sensitivity == IDHEventSensitivitySecret);
     if (self.nativeStack) optional[@"nativeStack"] = self.nativeStack;
     if (self.jsStack) optional[@"jsStack"] = self.jsStack;
     if (self.valueRefs) optional[@"valueRefs"] = self.valueRefs;

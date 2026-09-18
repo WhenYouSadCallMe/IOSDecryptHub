@@ -8,6 +8,9 @@
 - `IDHHookRegistry`：声明式 Profile 的原子安装、启停、卸载和快照；它只维护状态，不执行 Hook。
 - `IDHJSONLTransport`：事件 JSONL 落盘。
 
+`src/idh-host/IDHSQLiteStore.*` 提供可选的系统 SQLite 落盘；`src/idh-observers/`
+中的 Record-only 适配器只接收外部已授权事件，不主动发现或拦截目标进程。
+
 这些文件不实现注入、Inline Hook、反调试或常驻服务；它们可以在 macOS/Xcode
 环境中作为后续授权 Agent 的基础编译单元。跨平台的熵值、去重、溯源和查询实现
 位于 `open-engine/core`。

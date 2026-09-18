@@ -42,6 +42,7 @@
         return NO;
     }
     __block BOOL accepted = NO;
+    __block NSArray *handlers;
     dispatch_sync(_queue, ^{
         if (_closed) {
             _dropped++;
@@ -49,16 +50,18 @@
         }
         accepted = YES;
         _published++;
-        NSArray *handlers = [_handlers.allValues copy];
-        for (IDHEventHandler handler in handlers) {
-            handler(event);
-            _delivered++;
-        }
+        handlers = [_handlers.allValues copy];
     });
     if (!accepted && error) {
         *error = [NSError errorWithDomain:@"IOSDecryptHub.EventBus"
                                       code:2
                                   userInfo:@{NSLocalizedDescriptionKey: @"event bus is closed"}];
+    }
+    // Execute callbacks outside the registry queue. A callback may safely
+    // unsubscribe itself, close the bus, or publish a nested event.
+    for (IDHEventHandler handler in handlers) {
+        handler(event);
+        dispatch_sync(_queue, ^{ _delivered++; });
     }
     return accepted;
 }

@@ -20,12 +20,14 @@ for source in \
   "$ROOT"/src/idh-core/*.m \
   "$ROOT"/src/idh-native/*.m \
   "$ROOT"/src/idh-correlation/*.m \
-  "$ROOT"/src/idh-observers/*.m; do
+  "$ROOT"/src/idh-observers/*.m \
+  "$ROOT"/src/idh-host/*.m; do
   "$CLANG" -fobjc-arc -fblocks -fsyntax-only -isysroot "$SDK" \
     -I"$ROOT/src/idh-core" \
     -I"$ROOT/src/idh-native" \
     -I"$ROOT/src/idh-correlation" \
-    -I"$ROOT/src/idh-observers" "$source"
+    -I"$ROOT/src/idh-observers" \
+    -I"$ROOT/src/idh-host" "$source"
 done
 
 echo "idh-core Objective-C syntax: OK"
