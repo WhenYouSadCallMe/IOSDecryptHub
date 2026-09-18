@@ -22,12 +22,20 @@ for source in \
   "$ROOT"/src/idh-correlation/*.m \
   "$ROOT"/src/idh-observers/*.m \
   "$ROOT"/src/idh-host/*.m; do
-  "$CLANG" -fobjc-arc -fblocks -fsyntax-only -isysroot "$SDK" \
+  if ! output=$("$CLANG" -fobjc-arc -fblocks -fsyntax-only -isysroot "$SDK" \
     -I"$ROOT/src/idh-core" \
     -I"$ROOT/src/idh-native" \
     -I"$ROOT/src/idh-correlation" \
     -I"$ROOT/src/idh-observers" \
-    -I"$ROOT/src/idh-host" "$source"
+    -I"$ROOT/src/idh-host" "$source" 2>&1); then
+    printf '%s\n' "$output"
+    while IFS= read -r line; do
+      [ -n "$line" ] && printf '::error file=%s::%s\n' "$source" "$line"
+    done <<EOF
+$output
+EOF
+    exit 1
+  fi
 done
 
 echo "idh-core Objective-C syntax: OK"
