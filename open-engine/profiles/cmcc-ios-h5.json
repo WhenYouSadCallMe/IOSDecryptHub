@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "name": "cmcc-ios-h5-observe",
+  "mode": "record-only",
+  "hooks": [
+    {
+      "id": "cmcc.bridge.user-info",
+      "type": "objc",
+      "target": {
+        "class": "CMOSCMCCBridge",
+        "selector": "getUserInfo"
+      },
+      "capture": ["arguments", "return", "stack"],
+      "redact": ["phone", "token", "cookie", "authorization"],
+      "sampleRate": 1,
+      "metadata": {"role": "bridge-return", "flow": "coc"}
+    },
+    {
+      "id": "cmcc.bridge-concatenation-info",
+      "type": "objc",
+      "target": {
+        "class": "CMOSCMCCBridge",
+        "selector": "getConcatenationInfo"
+      },
+      "capture": ["arguments", "return", "stack"],
+      "redact": ["token", "cookie", "authorization"],
+      "sampleRate": 1,
+      "metadata": {"role": "bridge-return", "value": "wtAcId"}
+    },
+    {
+      "id": "cmcc.network.task-resume",
+      "type": "objc",
+      "target": {
+        "class": "NSURLSessionTask",
+        "selector": "resume"
+      },
+      "capture": ["arguments", "return", "stack"],
+      "redact": ["authorization", "cookie", "phone", "gr-risk-p3"],
+      "sampleRate": 1,
+      "metadata": {"role": "network-lifecycle", "flow": "coc"}
+    }
+  ]
+}

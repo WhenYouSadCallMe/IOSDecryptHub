@@ -1,0 +1,39 @@
+# Build and editor output
+bin/
+dist/
+build/
+*.exe
+*.app/
+*.ipa
+*.xcarchive/
+.DS_Store
+.vscode/
+.idea/
+
+# Runtime logs and local databases
+*.log
+*.sqlite
+*.sqlite3
+*.db
+tmp/
+reports/local/
+
+# Credentials and signing material
+.env
+.env.*
+!.env.example
+*.p12
+*.mobileprovision
+*.provisionprofile
+*.key
+*.pem
+*.cer
+*.crt
+*.der
+*.dylib
+*.framework/
+
+# Local device/session material
+case/private/
+fixtures/private/
+secrets/

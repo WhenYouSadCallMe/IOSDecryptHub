@@ -1,0 +1,41 @@
+name: Open engine checks
+
+on:
+  push:
+    paths:
+      - "open-engine/**"
+      - "src/idh-core/**"
+      - "tests/idh_core_syntax_test.sh"
+      - ".github/workflows/open-engine.yml"
+  pull_request:
+    paths:
+      - "open-engine/**"
+      - "src/idh-core/**"
+      - "tests/idh_core_syntax_test.sh"
+      - ".github/workflows/open-engine.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: Go analysis layer
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: open-engine
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache-dependency-path: open-engine/go.mod
+      - run: go test ./...
+      - run: go vet ./...
+
+  objective-c:
+    name: Objective-C core syntax
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: chmod +x tests/idh_core_syntax_test.sh && ./tests/idh_core_syntax_test.sh

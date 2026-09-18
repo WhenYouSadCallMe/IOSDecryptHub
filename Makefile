@@ -23,7 +23,17 @@ test-updater:
 	@chmod +x tests/updater_sim_test.sh
 	./tests/updater_sim_test.sh
 
+# Host-side open engine tests. This target does not build or inject a dylib;
+# it validates the portable event/analysis layer on macOS or CI.
+test-open-engine:
+	cd open-engine && go test ./... && go vet ./...
+
+# macOS/Xcode-only syntax check for the open Objective-C infrastructure.
+test-open-core:
+	@chmod +x tests/idh_core_syntax_test.sh
+	./tests/idh_core_syntax_test.sh
+
 clean:
 	rm -rf build/
 
-.PHONY: deb deb-rootless deb-roothide test-updater clean
+.PHONY: deb deb-rootless deb-roothide test-updater test-open-engine test-open-core clean

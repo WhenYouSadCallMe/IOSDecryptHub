@@ -21,6 +21,23 @@ https://ios.decrypthub.com
 
 默认不注入任何 App。依赖 ellekit。
 
+## 开源分析层（实验性）
+
+本仓库新增的 `open-engine/` 是设备无关的 AI 分析层：统一事件、声明式
+Profile、Hook 注册状态、熵值/魔数识别、噪声去重、值溯源和响应分层。
+它不会替换仓库内的闭源 `vendor/dylib/*/decrypt_helper.dylib`，也不会在
+Windows 上假装完成 iOS 注入。先运行：
+
+```bash
+make test-open-engine
+```
+
+设计和限制见 `open-engine/docs/IOSDecryptHub-短板与AI逆向优化分析.md`。
+
+`src/idh-core/` 同时提供 Objective-C 侧的事件对象、事件总线、Profile 校验器和
+JSONL 传输基础以及只维护声明式状态的 Hook Registry，供后续 macOS/Xcode 授权
+Agent 接入；当前不会自动替换闭源引擎。
+
 ## 包内组件
 
 | 组件 | 作用 |
