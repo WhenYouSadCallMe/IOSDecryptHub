@@ -8,6 +8,7 @@
 - `src/idh-correlation/IDHAnalysisProfiler.*`：Objective-C 侧熵值、SHA-256、魔数和编码摘要。
 - `src/idh-correlation/IDHStackSymbolizer.*`：用显式 slide 做 runtime → IDA 地址换算。
 - `src/idh-observers/IDHObserver.*`：观察器生命周期和 record-only/extended/lab 模式门禁。
+- `src/idh-observers/IDHRecordOnlyObserver.*`：接收外部授权事件、送入 EventBus，并归一化已有 WebKit Bridge 日志。
 - Objective-C CI 脚本扩展到上述目录，并自动选择 `iphoneos` 或 `macosx` SDK。
 
 ## 仍未实现
