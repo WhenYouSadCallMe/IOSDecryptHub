@@ -38,6 +38,16 @@ make test-open-engine
 JSONL 传输基础以及只维护声明式状态的 Hook Registry，供后续 macOS/Xcode 授权
 Agent 接入；当前不会自动替换闭源引擎。
 
+## 开源参考
+
+开放分析层的事件/解析设计参考了以下公开项目的接口思路；本仓库当前没有
+直接复制其 Hook 实现，也不把第三方代码当作已完成的 iOS 注入能力：
+
+- [facebook/fishhook](https://github.com/facebook/fishhook)
+- [iSEC-Partners/Introspy-iOS](https://github.com/iSEC-Partners/Introspy-iOS)
+- [solodecode/ios-cccrypt](https://github.com/solodecode/ios-cccrypt)
+- [PhD-5/CCCryptHook](https://github.com/PhD-5/CCCryptHook)
+
 ## 包内组件
 
 | 组件 | 作用 |

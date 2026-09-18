@@ -5,6 +5,8 @@ package host
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,7 +19,10 @@ import (
 	"iosruntimeassistant/core/analysis"
 	"iosruntimeassistant/core/collect"
 	"iosruntimeassistant/core/event"
+	"iosruntimeassistant/core/macho"
+	"iosruntimeassistant/core/protocol"
 	"iosruntimeassistant/core/session"
+	"iosruntimeassistant/core/stack"
 )
 
 const (
@@ -167,7 +172,7 @@ func (s *Server) dispatch(ctx context.Context, method string, params json.RawMes
 			return nil, &rpcError{Code: -32602, Message: err.Error()}
 		}
 		return toolSuccess(value), nil
-	case "query_events", "trace_value", "classify_response", "summarize_flow", "generate_frida_script", "generate_dylib_hook", "generate_observer_plan", "session_check", "status":
+	case "query_events", "find_values", "trace_value", "classify_response", "summarize_flow", "analyze_payload", "analyze_macho", "normalize_stack", "generate_frida_script", "generate_dylib_hook", "generate_observer_plan", "probe_mutation", "session_check", "status":
 		value, err := s.callTool(ctx, method, args)
 		if err != nil {
 			return nil, &rpcError{Code: -32602, Message: err.Error()}
@@ -194,6 +199,22 @@ func (s *Server) callTool(ctx context.Context, name string, args map[string]any)
 			return nil, err
 		}
 		return s.index.Query(query)
+	case "find_values":
+		return s.index.FindValues(valueQueryFromArgs(args))
+	case "analyze_payload":
+		data, err := payloadBytes(args)
+		if err != nil {
+			return nil, err
+		}
+		return protocol.Inspect(data, protocol.Options{MaxBytes: intArg(args, "maxBytes", protocol.DefaultMaxBytes), Depth: intArg(args, "depth", 2)})
+	case "analyze_macho":
+		path := stringArg(args, "path")
+		if path == "" {
+			return nil, errors.New("path is required")
+		}
+		return macho.ParseFile(path)
+	case "normalize_stack":
+		return normalizeStackArgs(args)
 	case "trace_value":
 		start := stringArg(args, "start")
 		if start == "" {
@@ -219,6 +240,8 @@ func (s *Server) callTool(ctx context.Context, name string, args map[string]any)
 		return s.summarizeFlow(args)
 	case "generate_frida_script", "generate_dylib_hook", "generate_observer_plan":
 		return observerPlan(name, args), nil
+	case "probe_mutation":
+		return mutationPlan(args), nil
 	case "session_check":
 		if s.guard == nil {
 			return map[string]any{"configured": false, "allowed": true, "reasons": []string{"no session guard configured"}}, nil
@@ -357,13 +380,104 @@ func toolDefinitions() []map[string]any {
 	objectSchema := map[string]any{"type": "object", "additionalProperties": true}
 	return []map[string]any{
 		{"name": "query_events", "description": "Query redacted runtime events by session, flow, request, type or time window.", "inputSchema": objectSchema},
+		{"name": "find_values", "description": "Find value references and derived byte profiles by hash, role, name, encoding or magic bytes.", "inputSchema": objectSchema},
+		{"name": "analyze_payload", "description": "Bounded read-only protocol, compression, encoding, entropy and protobuf/messagepack inspection.", "inputSchema": objectSchema},
+		{"name": "analyze_macho", "description": "Read-only Mach-O/FAT metadata, UUID, segments and architecture inspection.", "inputSchema": objectSchema},
+		{"name": "normalize_stack", "description": "Convert runtime stack addresses to IDA/Ghidra addresses using an explicit ASLR slide.", "inputSchema": objectSchema},
 		{"name": "trace_value", "description": "Trace a value forward or backward through the provenance graph.", "inputSchema": objectSchema},
 		{"name": "classify_response", "description": "Separate transport, gateway, risk and business response layers.", "inputSchema": objectSchema},
 		{"name": "summarize_flow", "description": "Return a compact, token-efficient summary of one flow.", "inputSchema": objectSchema},
 		{"name": "generate_frida_script", "description": "Return a non-executable record-only observer plan for an authorized adapter.", "inputSchema": objectSchema},
 		{"name": "generate_dylib_hook", "description": "Return a non-executable record-only adapter plan; no hook code is emitted.", "inputSchema": objectSchema},
+		{"name": "probe_mutation", "description": "Create an auditable, non-executable mutation plan for a future authorized lab adapter.", "inputSchema": objectSchema},
 		{"name": "session_check", "description": "Check whether an event belongs to the active and fresh analysis session.", "inputSchema": objectSchema},
 		{"name": "status", "description": "Return host event-index and session-guard status.", "inputSchema": objectSchema},
+	}
+}
+
+func mutationPlan(args map[string]any) map[string]any {
+	target := map[string]any{}
+	for _, key := range []string{"flowId", "requestId", "eventId", "valueHash", "field", "operation"} {
+		if value := stringArg(args, key); value != "" {
+			target[key] = value
+		}
+	}
+	mutation := stringArg(args, "mutation")
+	if mutation == "" {
+		mutation = "replace-with-same-length-marker"
+	}
+	return map[string]any{
+		"kind":                         "probe_mutation",
+		"mode":                         "record-only-plan",
+		"executable":                   false,
+		"requiresExplicitConfirmation": true,
+		"target":                       target,
+		"mutation":                     mutation,
+		"capture":                      []string{"beforeHash", "afterHash", "responseClassification", "rollbackStatus"},
+		"safety": []string{
+			"never mutate a live account or production endpoint",
+			"require a fresh session and an isolated authorized test target",
+			"reject length-changing mutations unless the adapter explicitly declares framing support",
+			"record a rollback token and stop on the first unexpected response",
+		},
+		"reason": "The host layer only plans mutations. Applying them requires a separately signed lab adapter and is disabled by repository policy.",
+	}
+}
+
+func payloadBytes(args map[string]any) ([]byte, error) {
+	value := args["data"]
+	encoding := strings.ToLower(stringArg(args, "encoding"))
+	if text, ok := value.(string); ok {
+		switch encoding {
+		case "hex":
+			decoded, err := hex.DecodeString(strings.TrimSpace(text))
+			if err != nil {
+				return nil, fmt.Errorf("data is not valid hex: %w", err)
+			}
+			return decoded, nil
+		case "base64":
+			decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(text))
+			if err != nil {
+				return nil, fmt.Errorf("data is not valid base64: %w", err)
+			}
+			return decoded, nil
+		default:
+			return []byte(text), nil
+		}
+	}
+	if value == nil {
+		return nil, errors.New("data is required")
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return nil, fmt.Errorf("data cannot be encoded: %w", err)
+	}
+	return encoded, nil
+}
+
+func normalizeStackArgs(args map[string]any) ([]stack.Frame, error) {
+	encoded, err := json.Marshal(args["frames"])
+	if err != nil {
+		return nil, errors.New("frames must be an array")
+	}
+	var frames []event.StackFrame
+	if err := json.Unmarshal(encoded, &frames); err != nil {
+		return nil, fmt.Errorf("frames must be an array of stack frames: %w", err)
+	}
+	return stack.NormalizeNative(frames, uint64Arg(args, "slide", 0)), nil
+}
+
+func valueQueryFromArgs(args map[string]any) collect.ValueQuery {
+	return collect.ValueQuery{
+		Term:       stringArg(args, "term"),
+		Hash:       stringArg(args, "hash"),
+		Role:       stringArg(args, "role"),
+		DataType:   stringArg(args, "dataType"),
+		SessionID:  stringArg(args, "sessionId"),
+		FlowID:     stringArg(args, "flowId"),
+		Type:       event.Type(stringArg(args, "type")),
+		Limit:      intArg(args, "limit", 100),
+		Projection: stringArg(args, "projection"),
 	}
 }
 
@@ -386,6 +500,26 @@ func intArg(args map[string]any, key string, fallback int) int {
 		}
 	case string:
 		parsed, err := strconv.Atoi(strings.TrimSpace(typed))
+		if err == nil {
+			return parsed
+		}
+	}
+	return fallback
+}
+
+func uint64Arg(args map[string]any, key string, fallback uint64) uint64 {
+	value := args[key]
+	switch typed := value.(type) {
+	case float64:
+		if typed >= 0 {
+			return uint64(typed)
+		}
+	case int:
+		if typed >= 0 {
+			return uint64(typed)
+		}
+	case string:
+		parsed, err := strconv.ParseUint(strings.TrimSpace(typed), 0, 64)
 		if err == nil {
 			return parsed
 		}

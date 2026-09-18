@@ -24,6 +24,18 @@ type EventQuery struct {
 	IncludeDropped bool
 }
 
+type ValueQuery struct {
+	Term       string
+	Hash       string
+	Role       string
+	DataType   string
+	SessionID  string
+	FlowID     string
+	Type       event.Type
+	Limit      int
+	Projection string
+}
+
 type QueryResult struct {
 	Events     []map[string]any `json:"events"`
 	NextCursor int              `json:"nextCursor,omitempty"`
@@ -136,6 +148,97 @@ func (i *EventIndex) Query(q EventQuery) (QueryResult, error) {
 		result.Events = append(result.Events, ProjectEvent(e, projection, i.redactor))
 	}
 	return result, nil
+}
+
+// FindValues searches only derived identifiers and value references. It never
+// performs a substring search over raw arguments/results, which keeps a
+// credential from becoming searchable plaintext in the host index.
+func (i *EventIndex) FindValues(q ValueQuery) (QueryResult, error) {
+	if q.Limit < 0 {
+		return QueryResult{}, fmt.Errorf("limit must not be negative")
+	}
+	if q.Limit == 0 {
+		q.Limit = 100
+	}
+	projection := strings.ToLower(strings.TrimSpace(q.Projection))
+	if projection == "" {
+		projection = "full"
+	}
+	if projection != "summary" && projection != "stacks" && projection != "crypto" && projection != "network" && projection != "full" {
+		return QueryResult{}, fmt.Errorf("unsupported projection %q", q.Projection)
+	}
+	term := strings.ToLower(strings.TrimSpace(q.Term))
+	hash := strings.ToLower(strings.TrimSpace(q.Hash))
+	role := strings.ToLower(strings.TrimSpace(q.Role))
+	dataType := strings.ToLower(strings.TrimSpace(q.DataType))
+	i.mu.RLock()
+	matched := make([]event.Event, 0)
+	for _, e := range i.events {
+		if q.SessionID != "" && e.SessionID != q.SessionID {
+			continue
+		}
+		if q.FlowID != "" && e.FlowID != q.FlowID {
+			continue
+		}
+		if q.Type != "" && e.Type != q.Type {
+			continue
+		}
+		if valueMatches(e, term, hash, role, dataType) {
+			matched = append(matched, e)
+		}
+	}
+	i.mu.RUnlock()
+	sort.SliceStable(matched, func(a, b int) bool { return matched[a].Timestamp.Before(matched[b].Timestamp) })
+	result := QueryResult{Matched: len(matched), Truncated: len(matched) > q.Limit}
+	if result.Truncated {
+		matched = matched[:q.Limit]
+		result.NextCursor = q.Limit
+	}
+	for _, e := range matched {
+		result.Events = append(result.Events, ProjectEvent(e, projection, i.redactor))
+	}
+	return result, nil
+}
+
+func valueMatches(e event.Event, term, hash, role, dataType string) bool {
+	for _, ref := range e.ValueRefs {
+		if hash != "" && !strings.EqualFold(strings.TrimSpace(ref.Hash), hash) {
+			continue
+		}
+		if role != "" && !strings.EqualFold(strings.TrimSpace(ref.Role), role) {
+			continue
+		}
+		if dataType != "" && !strings.EqualFold(strings.TrimSpace(ref.DataType), dataType) {
+			continue
+		}
+		if term != "" && !containsFold(term, ref.Name, ref.Hash, ref.Role, ref.DataType, ref.SourceEventID) {
+			continue
+		}
+		return true
+	}
+	// Derived profiles have no role or dataType. Do not let them satisfy a
+	// constrained reference query merely because their hash also matches.
+	if e.Analysis != nil && role == "" && dataType == "" {
+		for _, profile := range append(append([]event.ValueAnalysis{}, e.Analysis.Arguments...), e.Analysis.Result...) {
+			if hash != "" && !strings.EqualFold(strings.TrimSpace(profile.SHA256), hash) {
+				continue
+			}
+			if term != "" && !containsFold(term, profile.Path, profile.SHA256, profile.Encoding, profile.MagicBytes) {
+				continue
+			}
+			return true
+		}
+	}
+	return false
+}
+
+func containsFold(term string, values ...string) bool {
+	for _, value := range values {
+		if strings.Contains(strings.ToLower(value), term) {
+			return true
+		}
+	}
+	return false
 }
 
 func ProjectEvent(e event.Event, projection string, redactor *Redactor) map[string]any {

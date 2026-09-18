@@ -24,6 +24,7 @@ func TestMCPQueryAndToolsList(t *testing.T) {
 	e.SessionID = "session-a"
 	e.FlowID = "flow-a"
 	e.Arguments = map[string]any{"url": "https://example.test/order", "authorization": "secret"}
+	e.ValueRefs = []event.ValueRef{{Name: "request.signature", Hash: "hash-a", Role: "signature"}}
 	if err := index.Add(e); err != nil {
 		t.Fatal(err)
 	}
@@ -40,6 +41,14 @@ func TestMCPQueryAndToolsList(t *testing.T) {
 	})
 	if queryResponse.Code != http.StatusOK || strings.Contains(queryResponse.Body.String(), "secret") || !strings.Contains(queryResponse.Body.String(), "flow-a") {
 		t.Fatalf("query response leaked or missing data: %s", queryResponse.Body.String())
+	}
+
+	findResponse := requestRPC(t, server, map[string]any{
+		"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+		"params": map[string]any{"name": "find_values", "arguments": map[string]any{"role": "signature"}},
+	})
+	if findResponse.Code != http.StatusOK || !strings.Contains(findResponse.Body.String(), "hash-a") {
+		t.Fatalf("find_values response: %s", findResponse.Body.String())
 	}
 }
 
@@ -106,6 +115,39 @@ func TestMCPTraceAndSessionCheck(t *testing.T) {
 	})
 	if sessionCheck.Code != http.StatusOK || !strings.Contains(sessionCheck.Body.String(), `"allowed":true`) {
 		t.Fatalf("session check response: %s", sessionCheck.Body.String())
+	}
+}
+
+func TestMCPAnalyzePayloadAndNormalizeStack(t *testing.T) {
+	server := NewServer(Config{})
+	payload := requestRPC(t, server, map[string]any{
+		"jsonrpc": "2.0", "id": 10, "method": "tools/call",
+		"params": map[string]any{"name": "analyze_payload", "arguments": map[string]any{"data": `{"code":0}`, "encoding": "utf8"}},
+	})
+	if payload.Code != http.StatusOK || !strings.Contains(payload.Body.String(), "json") {
+		t.Fatalf("analyze_payload response: %s", payload.Body.String())
+	}
+	stackResponse := requestRPC(t, server, map[string]any{
+		"jsonrpc": "2.0", "id": 11, "method": "tools/call",
+		"params": map[string]any{"name": "normalize_stack", "arguments": map[string]any{
+			"slide":  "0x100000000",
+			"frames": []map[string]any{{"address": float64(0x100012340), "image": "App", "symbol": "encrypt"}},
+		}},
+	})
+	if stackResponse.Code != http.StatusOK || !strings.Contains(stackResponse.Body.String(), "0x12340") {
+		t.Fatalf("normalize_stack response: %s", stackResponse.Body.String())
+	}
+}
+
+func TestMCPProbeMutationIsNonExecutable(t *testing.T) {
+	server := NewServer(Config{})
+	response := requestRPC(t, server, map[string]any{
+		"jsonrpc": "2.0", "id": 12, "method": "tools/call",
+		"params": map[string]any{"name": "probe_mutation", "arguments": map[string]any{"flowId": "flow-a", "field": "signature", "mutation": "flip-one-byte"}},
+	})
+	body := response.Body.String()
+	if response.Code != http.StatusOK || !strings.Contains(body, "record-only-plan") || !strings.Contains(body, "\"executable\":false") {
+		t.Fatalf("unexpected mutation plan: %s", body)
 	}
 }
 

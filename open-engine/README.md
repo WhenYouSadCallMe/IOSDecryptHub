@@ -18,6 +18,9 @@
 - `core/collect`：有上限的事件索引、按 Flow/Request/类型过滤、游标分页和安全投影；`Ingestor` 把会话保护、关联和去重串成一条入口
 - `core/session`：会话 ID、时间窗口、证据 freshness/TTL 的 fail-closed 检查，避免把旧 cookie、bridge ticket 或风控结果混进新采集
 - `host`：可嵌入的 MCP JSON-RPC Handler，提供 `query_events`、`trace_value`、`summarize_flow`、`classify_response`、`session_check` 和状态查询
+- `find_values`：按哈希、名称、角色、数据类型、编码、魔数和分析路径查找值引用，不把原始凭据变成可搜索明文
+- `core/protocol`：有界识别 JSON/HTTP/Hex/Base64/Gzip/Zlib/Protobuf/MessagePack，输出摘要、哈希和嵌套关系
+- `core/macho` 与 `core/stack`：解析 Mach-O/FAT 的架构、UUID、Segment，并把 runtime 地址换算为 IDA/Ghidra 地址
 - Windows 可执行的 Go 单元测试
 
 后续 iOS Agent、Objective-C/Swift Hook 和 WebKit 适配会在相同事件契约上实现。
@@ -32,6 +35,15 @@ go vet ./...
 ```
 
 当前不会连接真实设备，也不会执行短信、下单或其他业务写请求。
+
+## AI 工具扩展
+
+- `analyze_payload`：只读、限大小的协议/编码/压缩/熵分析；HTTP header 值始终脱敏。
+- `analyze_macho`：读取本地 Mach-O/FAT 文件的架构、UUID、Segment 和加载地址信息。
+- `normalize_stack`：使用调用方明确提供的 ASLR slide 计算 `IDA_Address = runtime - slide`。
+- `probe_mutation`：生成需要明确确认的实验室变异计划，不在 Host 层执行修改。
+
+这些接口只处理已采集的证据，不会从目标进程读取内存，也不会主动修改网络请求。
 
 ## MCP 嵌入示例
 
